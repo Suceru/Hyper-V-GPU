@@ -131,6 +131,8 @@ driverName = Dozen
 | 验证状态 | `gpu-check` |
 | 视频硬解 | 环境变量 `LIBVA_DRIVER_NAME=d3d12` 已配置，可用 `vainfo` 验证 |
 | 高分辨率/高刷/游戏串流 | Hyper-V 控制台上限 1080p/60Hz；建议 VM 内装 **Sunshine**，主机用 **Moonlight** 串流 |
+| Hyper-V 增强会话（xrdp/RDP） | 独立会话，支持剪贴板/音频/自适应分辨率；**没有 GPU-PV 加速**。若登录框怎么选/黑屏，见 [troubleshooting 第 11 节](docs/troubleshooting.md) |
+| 切回控制台桌面 | VMConnect 工具栏/「视图」菜单里关闭「增强会话」即回到基本会话（GPU 加速生效的那个桌面） |
 
 > 说明：GNOME 合成器（桌面本身）运行在**软件渲染 llvmpipe**，**应用层**是硬件加速——这是 22.04 上的稳定取舍（原因见坑 1）。
 
@@ -145,7 +147,8 @@ driverName = Dozen
 5. **检查点**：GPU-PV VM 不支持检查点。关闭自动检查点，并删除已有检查点（**不要回滚**到部署前检查点，否则客机驱动丢失需重装）。
 6. **Secure Boot**：必须关闭，dxgkrnl 是未签名 DKMS 模块。
 7. **Vulkan 是 Dozen 翻译层**（Vulkan→D3D12），非原生驱动，个别程序可能不兼容或性能一般。
-8. **磁盘**：客机根分区建议 ≥ 20GB（Mesa + 驱动包 + 编译约需 2GB 余量）。
+8. **Hyper-V 增强会话（xrdp）**：xrdp 的 `startwm.sh` 会 source `/etc/profile`，GPU 环境变量必须以「交互式 shell 且非 XRDP 会话」为条件导出（本仓库脚本已内置 guard），否则增强会话里的 GNOME Xorg 起不来；另外增强会话是独立 RDP 会话，不是控制台桌面，且没有 GPU-PV 加速。
+9. **磁盘**：客机根分区建议 ≥ 20GB（Mesa + 驱动包 + 编译约需 2GB 余量）。
 
 ---
 

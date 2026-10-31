@@ -172,3 +172,92 @@ VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/dzn_icd.x86_64.json vulkaninfo --summar
 - `Dropped Escape call with ulEscapeCode` 是 libd3d12 控制台处理的无害告警；
 - VM 关机后再开机，GPU 分区适配器配置会保留；宿主重启/驱动更新后建议先验证宿主 `Get-VMHostPartitionableGpu`；
 - 整机回滚见 README 第 8 节。
+
+---
+
+## 11. Hyper-V 增强会话（xrdp / RDP）专题
+
+### 11.1 这个登录框是什么？怎么选？
+
+Hyper-V 虚拟机连接窗口里点「增强会话」后，Linux 客机会通过 **xrdp（RDP 服务）** 弹出登录框：
+
+```
+Login to <hostname>   [xrdp logo]
+Session  [Xorg ▼]
+username [        ]
+password [        ]
+```
+
+- **Session 选 `Xorg`**（xrdp 的 xorgxrdp 后端，启动 GNOME on Xorg 桌面）；
+- username / password 填**客机里的 Linux 用户**（不是 Windows 用户）；
+- 点 OK 即可。其它选项（如 `Xvnc`、`console`）一般不用；`console` 会接管物理控制台会话，容易冲突。
+
+### 11.2 增强会话里的桌面和「之前的桌面」不一样？
+
+**这是正常的**：增强会话是**独立的 RDP 登录会话**（xrdp 分配 `DISPLAY=:10`），不是控制台那个 GNOME Wayland 会话（tty2）。
+两个会话的应用窗口互不相通；分辨率、剪贴板、音频行为也不同。
+
+- 想回到「之前的桌面」：在 VMConnect 窗口的工具栏/「视图」菜单里**关闭增强会话**，切回**基本会话**（控制台桌面）。
+- 控制台桌面才是 GPU-PV 加速生效的会话（`glxinfo` 显示 `D3D12 (GPU)`）。
+
+| | 基本会话（控制台） | 增强会话（xrdp/RDP） |
+|---|---|---|
+| 桌面 | GNOME Wayland，控制台会话 | GNOME on Xorg，独立 `:10` 会话 |
+| GPU-PV 加速 | ✅（应用经 Mesa d3d12/dzn） | ❌（Xorg 会话走软件渲染/llvmpipe） |
+| 剪贴板/音频/自适应分辨率 | 有限 | ✅ |
+| 适用 | GPU 应用、Blender、游戏串流 | 日常管理、复制粘贴、高分辨率 RDP |
+
+### 11.3 增强会话登录后黑屏 / GNOME 起不来 / 不是正常桌面
+
+**原因**：`/etc/profile.d/gpu-pv.sh` 里的 `GALLIUM_DRIVER=d3d12` 被 xrdp 的 `/etc/xrdp/startwm.sh`（它 source 了 `/etc/profile`）注入到 GNOME 的 **Xorg** 会话，导致 GNOME 合成器初始化失败——与 22.04 上 Wayland 黑屏是同一类问题。
+
+**修复**（本仓库 `guest/03-post-config.sh` 已内置 guard，若手工部署需自行处理）：
+
+```bash
+# 1) 环境变量只给交互式 shell，且跳过 xrdp / X 会话
+sudo tee /etc/profile.d/gpu-pv.sh >/dev/null <<'EOF'
+case $- in
+  *i*)
+    if [ -z "${XRDP_SESSION:-}" ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+      export GALLIUM_DRIVER=d3d12
+      export DRI_PRIME=1
+      export LIBVA_DRIVER_NAME=d3d12
+    fi
+    ;;
+esac
+EOF
+# 2) ~/.bashrc 中同样加 [ -z "$XRDP_SESSION" ] 条件
+# 3) 结束旧的 xrdp 会话后重启服务
+sudo pkill -f 'Xorg :10'; sudo systemctl restart xrdp xrdp-sesman
+```
+
+> ⚠️ 清理 xrdp 会话时**不要**用 `loginctl terminate-session` 批量终止所有用户会话：
+> 会连带杀掉 SSH 和控制台会话。只针对 xrdp 的 `:10` 会话处理即可。
+
+### 11.4 增强会话连接失败 / 日志报证书错误
+
+**现象**（`journalctl -u xrdp`）：
+
+```
+Cannot read certificate file /etc/xrdp/cert.pem: No such file or directory
+Cannot read private key file /etc/xrdp/key.pem: Permission denied
+libxrdp_force_read: header read error / MCS Connection Sequence failed
+```
+
+**原因**：Ubuntu 的 xrdp 默认把 `/etc/xrdp/{cert,key}.pem` 符号链接到 `ssl-cert-snakeoil`；若该 snakeoil 证书不存在或是坏链接，
+TLS 协商失败，Hyper-V 增强会话可能连不上或时好时坏。
+
+**修复**：
+
+```bash
+sudo rm -f /etc/xrdp/cert.pem /etc/xrdp/key.pem
+sudo openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 3650   -keyout /etc/xrdp/key.pem -out /etc/xrdp/cert.pem -subj "/CN=$(hostname)"
+sudo chown root:xrdp /etc/xrdp/key.pem /etc/xrdp/cert.pem
+sudo chmod 640 /etc/xrdp/key.pem && sudo chmod 644 /etc/xrdp/cert.pem
+sudo systemctl restart xrdp xrdp-sesman
+```
+
+### 11.5 想同时保留两个会话？
+
+可以：控制台保持自动登录的 Wayland 桌面，增强会话再开一个 Xorg 会话。
+但注意二者是不同会话，桌面文件、剪贴板互不共享；且增强会话没有 GPU-PV 加速。
