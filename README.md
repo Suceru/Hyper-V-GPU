@@ -134,6 +134,7 @@ driverName = Dozen
 | Hyper-V 增强会话（xrdp/RDP） | 独立会话，支持剪贴板/音频/自适应分辨率；**没有 GPU-PV 加速**。若登录框怎么选/黑屏，见 [troubleshooting 第 11 节](docs/troubleshooting.md) |
 | 切回控制台桌面 | VMConnect 工具栏/「视图」菜单里关闭「增强会话」即回到基本会话（GPU 加速生效的那个桌面） |
 | 基本会话分辨率（全屏不跟随） | 基本会话分辨率固定（默认 1024×768），全屏只放大画面不改 guest。运行 `python3 guest/set-resolution.py` 可切到 1920×1080 并持久化（详见 troubleshooting 第 12 节） |
+| **游戏/高帧率串流** | 推荐 **Sunshine（VM 内）+ Moonlight（宿主）**：绕开基本会话显示通道瓶颈。已实装并配对，详见 [docs/streaming.md](docs/streaming.md) |
 
 > 说明：GNOME 合成器（桌面本身）运行在**软件渲染 llvmpipe**，**应用层**是硬件加速——这是 22.04 上的稳定取舍（原因见坑 1）。
 
@@ -206,6 +207,7 @@ Hyper-V-GPU/
 │   └── ssh-runner.py          # 可选：SSH 批量执行/上传脚本
 ├── docs/
 │   ├── case-study-2026-10-31.md  # 本次实机部署报告（含验证数据）
+│   ├── streaming.md              # Sunshine + Moonlight 串流方案（已实装）
 │   └── troubleshooting.md        # 已知问题与修复
 └── ATTRIBUTION.md
 ```
