@@ -257,7 +257,29 @@ sudo chmod 640 /etc/xrdp/key.pem && sudo chmod 644 /etc/xrdp/cert.pem
 sudo systemctl restart xrdp xrdp-sesman
 ```
 
-### 11.5 想同时保留两个会话？
+### 11.5 增强会话 vs 自动登录控制台 GNOME：会冲突（本机实测）
 
-可以：控制台保持自动登录的 Wayland 桌面，增强会话再开一个 Xorg 会话。
-但注意二者是不同会话，桌面文件、剪贴板互不共享；且增强会话没有 GPU-PV 加速。
+本机环境（Ubuntu 22.04 + GDM `AutomaticLoginEnable=true`）实测：**只使用增强会话（xrdp，GNOME on Xorg）时，GNOME 桌面启动失败**：
+
+```
+gnome-session-binary: WARNING: software acceleration check failed: Child process exited with code 1
+# 随后 journal 中出现
+gnome-session-failed --allow-logout
+```
+
+现象：RDP 登录成功，但画面只剩 **xrdp 的青色背景**，没有桌面。即使修好环境变量泄漏（11.3）仍然如此；
+xorgxrdp 的图形栈与该 VM 的 GPU-PV + 自动登录控制台会话组合不兼容。
+
+**推荐做法（本方案）**：需要 GPU 加速桌面时**只用基本会话**（控制台自动登录桌面）。
+
+```bash
+# 停用增强会话，回到基本会话（在客机内执行）
+sudo systemctl stop xrdp xrdp-sesman
+sudo systemctl reset-failed xrdp xrdp-sesman 2>/dev/null || true
+sudo systemctl restart gdm3      # 重建控制台自动登录会话
+```
+
+之后在 VMConnect 里重新连接（若提示增强会话不可用，点确定即进入基本会话）。
+
+> 需要增强会话的剪贴板/音频/高分辨率时，改用 RustDesk / Sunshine / VNC 等远程方案，均不影响 GPU 桌面。
+> 若确实要长期使用 xrdp 增强会话，建议关闭 GDM 自动登录，并把增强会话作为唯一图形会话（此时无 GPU-PV 加速）。
