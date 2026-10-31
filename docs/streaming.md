@@ -138,3 +138,55 @@ Sunshine 侧需批准同一 PIN，任选其一：
    服务已 enable，图形会话启动时自动运行；配对信息重启保留。
 7. **Web UI 凭据**：`admin` / `Sunshine@2026`，建议在 `https://<VM_IP>:47990` 里修改。
 8. **网络变化**：VM 用 DHCP，IP 变化后 Moonlight 需重新添加主机（或用 mDNS 名称 `suceru-Virtual-Machine.local`）。
+
+---
+
+## 附：无 GPU-PV / 纯软件渲染模式（X11 会话）
+
+如果 VM **没有** GPU-PV（原始图形状态，Mesa llvmpipe 软件渲染），串流同样可用，但配置不同：
+
+### 事实
+
+- 此模式下 Ubuntu 会话是 **GNOME on Xorg（X11）**（`loginctl show-session ... -p Type` = `x11`，`DISPLAY=:0`）
+- 用 **X11 采集**（`capture = x11`），比 KMS/portal 稳，且**鼠标光标正常显示**
+- 关闭 Qt 系统托盘：`system_tray = false`（否则需要 Qt xcb/wayland 平台插件，容易启动失败）
+- 编码仍是软件 libx264；1080p 桌面建议客户端用 720p/30fps 串流
+
+### 配置
+
+```bash
+# ~/.config/sunshine/sunshine.conf
+capture = x11
+system_tray = false
+sw_preset = ultrafast
+min_log_level = info
+```
+
+```ini
+# ~/.config/systemd/user/app-dev.lizardbyte.app.Sunshine.service.d/override.conf
+[Service]
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/run/user/1000/gdm/Xauthority
+```
+
+> Xauthority 路径从 `ps -o args= -C Xorg` 的 `-auth` 参数获取（GDM 会放在 `/run/user/1000/gdm/Xauthority`）。
+
+### 安装来源
+
+该模式通过 **LizardByte 官方 Cloudsmith apt 源**安装（GitHub 直连受限时可用），
+或宿主机下载 deb 后 scp 进 VM 用 `apt-get install ./sunshine.deb` 离线安装（依赖从 Ubuntu 源补齐）。
+
+### 配对
+
+```powershell
+# 宿主
+& 'C:\Program Files\Moonlight Game Streaming\Moonlight.exe' pair <VM_IP> --pin 1234
+```
+
+```bash
+# VM 内：以无头模式从 stdin 读 PIN 完成配对
+yes 1234 | sunshine -0
+```
+
+配对成功后 `moonlight list <VM_IP>` 应返回 `Desktop` 等应用列表。
+
