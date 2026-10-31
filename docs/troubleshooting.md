@@ -283,3 +283,34 @@ sudo systemctl restart gdm3      # 重建控制台自动登录会话
 
 > 需要增强会话的剪贴板/音频/高分辨率时，改用 RustDesk / Sunshine / VNC 等远程方案，均不影响 GPU 桌面。
 > 若确实要长期使用 xrdp 增强会话，建议关闭 GDM 自动登录，并把增强会话作为唯一图形会话（此时无 GPU-PV 加速）。
+
+---
+
+## 12. 基本会话分辨率固定 / 全屏时画面不跟随窗口
+
+**现象**：把 Hyper-V VMConnect 窗口最大化/全屏，VM 里的桌面尺寸不变（画面被放大或在中间留黑边）。
+
+**原因**：这是 **Hyper-V 基本会话的固有限制**——基本会话把 VM 的 framebuffer 按固定分辨率（默认 1024×768）显示，
+不会随窗口大小动态修改 guest 分辨率；"窗口跟随缩放 / 自适应分辨率"是 **增强会话（xrdp/RDP）** 的能力，
+而增强会话在本方案中因与自动登录 GNOME 冲突而停用（见 11.5），且没有 GPU-PV 加速。
+
+**修复（提高基本会话分辨率）**：Hyper-V 虚拟显卡最多支持 1920×1080。在**客机内**运行：
+
+```bash
+python3 guest/set-resolution.py          # 或任意路径下的副本
+```
+
+脚本通过 Mutter DisplayConfig D-Bus 接口把 `Virtual-1` 切到 1920×1080@60（持久化写入 `~/.config/monitors.xml`），
+立即生效、重启后保持。也可以用图形界面：**设置 → 显示器 → 分辨率 → 1920×1080**。
+
+验证：
+
+```bash
+DISPLAY=:0 xrandr | head -2        # 应显示 current 1920 x 1080
+cat ~/.config/monitors.xml         # 持久化配置
+```
+
+之后把 VMConnect 窗口最大化/全屏查看即可（1080p 在 2K/4K 屏幕上 1:1 居中显示）。
+
+**如果想要真正的"自适应窗口尺寸"**：只能走增强会话（无 GPU）或改用 **Sunshine/Moonlight、RustDesk** 等串流/远程工具（保留 GPU 桌面）。
+

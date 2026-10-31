@@ -133,6 +133,7 @@ driverName = Dozen
 | 高分辨率/高刷/游戏串流 | Hyper-V 控制台上限 1080p/60Hz；建议 VM 内装 **Sunshine**，主机用 **Moonlight** 串流 |
 | Hyper-V 增强会话（xrdp/RDP） | 独立会话，支持剪贴板/音频/自适应分辨率；**没有 GPU-PV 加速**。若登录框怎么选/黑屏，见 [troubleshooting 第 11 节](docs/troubleshooting.md) |
 | 切回控制台桌面 | VMConnect 工具栏/「视图」菜单里关闭「增强会话」即回到基本会话（GPU 加速生效的那个桌面） |
+| 基本会话分辨率（全屏不跟随） | 基本会话分辨率固定（默认 1024×768），全屏只放大画面不改 guest。运行 `python3 guest/set-resolution.py` 可切到 1920×1080 并持久化（详见 troubleshooting 第 12 节） |
 
 > 说明：GNOME 合成器（桌面本身）运行在**软件渲染 llvmpipe**，**应用层**是硬件加速——这是 22.04 上的稳定取舍（原因见坑 1）。
 
@@ -199,7 +200,8 @@ Hyper-V-GPU/
 │   ├── 02-dxgkrnl-deploy.sh   # DKMS dxgkrnl + 库/驱动注入 + 延迟加载
 │   ├── 03-post-config.sh      # 环境变量（防黑屏）/gpu-run/gpu-check/GDM
 │   ├── gpu-check.sh
-│   └── gpu-run
+│   ├── gpu-run
+│   └── set-resolution.py      # 基本会话切 1920x1080（持久化）
 ├── tools/
 │   └── ssh-runner.py          # 可选：SSH 批量执行/上传脚本
 ├── docs/
