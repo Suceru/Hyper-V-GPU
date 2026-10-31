@@ -314,3 +314,50 @@ cat ~/.config/monitors.xml         # 持久化配置
 
 **如果想要真正的"自适应窗口尺寸"**：只能走增强会话（无 GPU）或改用 **Sunshine/Moonlight、RustDesk** 等串流/远程工具（保留 GPU 桌面）。
 
+---
+
+## 13. 启动 3D 游戏后整个 VM 像卡死（GPU-PV 兼容性 + 基本会话显示通道瓶颈）
+
+**现象**：在客机里启动 3D 游戏（本例：Survivalcraft 原生 Linux 版），进入地图后整个 VM 像卡住：
+鼠标/画面不更新、SSH 频繁掉线；但宿主机上 VM 进程与 GPU 分区仍活跃。
+
+**实测证据（2026-10-31）**：
+
+```bash
+# 1) 游戏进程确实走了 GPU-PV 的 D3D12 路径
+ls -l /proc/<game-pid>/fd | grep dxg          # -> /dev/dxg
+grep -oE 'libd3d12[^ ]*|libdxcore[^ ]*' /proc/<game-pid>/maps
+# 2) 进入地图时内核报 GPU 虚拟地址分配失败
+dmesg -T | grep dxg
+#   misc dxg: dxgk: dxgkio_reserve_gpu_va: Ioctl failed: -75   (EOVERFLOW)
+# 3) 宿主机 GPU 引擎可看到 VM 的 vmwp.exe 在使用 GPU 分区
+Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine | ? Name -like '*phys_0_eng*'
+# 4) 游戏卡在重试循环(≈80% CPU)，同时全屏 1080p 帧要走 VMBus 合成显示通道，
+#    通道饱和把同一 VMBus 上的虚拟网络也拖慢 -> SSH 掉线、整机“假死”
+```
+
+**根因**：
+
+1. GPU-PV 的 D3D12 路径是实验性驱动（Mesa d3d12 / Dozen 翻译层），部分游戏在加载大量纹理/大块显存分配时会触发
+   `dxgkio_reserve_gpu_va` 失败（-75），游戏卡在重试循环；
+2. Hyper-V **基本会话**的显示输出经 VMBus 搬送 framebuffer，全屏 1080p 的高帧率画面会占满该通道
+   （连虚拟网卡都受影响），所以看起来“整个虚拟机都卡住了”。
+
+**处理**：
+
+```bash
+# 1) 恢复：在宿主机经 SSH 直接杀掉卡住的游戏（本次实测有效）
+ssh <user>@<vm-ip> "pkill -9 -f Survivalcraft"
+# 2) 让该游戏改用软件渲染（绕开 GPU-PV D3D12 路径）
+#    - 从文件管理器双击启动（GUI 进程不带 GALLIUM_DRIVER 环境变量），或：
+cd ~/sc-linux/linux-x64
+env -u GALLIUM_DRIVER -u DRI_PRIME -u LIBVA_DRIVER_NAME ./Survivalcraft
+```
+
+**建议**：
+
+- 不要在终端里直接启动游戏（终端 shell 会带 `GALLIUM_DRIVER=d3d12`，必然走 GPU-PV 路径）；
+- 软件渲染下建议**窗口化 + 1280×720 左右**分辨率，避免全屏 1080p 打满 VMBus 显示通道；
+- 想流畅 3D：用 **Sunshine + Moonlight 串流**（绕过基本会话显示通道，保留 GPU 渲染），或直接在 Windows 宿主上玩；
+- 纯桌面/办公使用不受影响（本次卡死仅发生在全屏 3D 游戏）。
+
