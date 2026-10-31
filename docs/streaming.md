@@ -190,3 +190,32 @@ yes 1234 | sunshine -0
 
 配对成功后 `moonlight list <VM_IP>` 应返回 `Desktop` 等应用列表。
 
+### 已知修复：Moonlight 串流中「鼠标能动但键盘无反应」
+
+**现象**：X11 会话下串流，鼠标移动正常但键盘按键无效。
+**原因**：Xorg 通过 systemd-logind 拿不到 `libvirtualhid Keyboard` 设备：
+
+```
+(EE) systemd-logind: failed to take device /dev/input/event2: No such device
+(II) event2: opening input device '/dev/input/event2' failed (Permission denied).
+(EE) libinput: libvirtualhid Keyboard: Failed to create a device for /dev/input/event2
+```
+
+**修复**（实测有效）：
+
+```bash
+# 1) 让正在运行 Xorg 的用户有权限直接打开 input 设备
+sudo usermod -aG input <your-user>
+# 2) 重启图形会话，让 Xorg 以新组权限启动（Sunshine 会在新会话自动启动）
+sudo systemctl restart gdm3
+```
+
+修复后 `xinput list` 应出现：
+
+```
+↳ libvirtualhid Keyboard    id=11 [slave keyboard (3)]
+```
+
+Xorg 日志出现 `libinput: libvirtualhid Keyboard: is a virtual subdevice` / `Adding extended input device ... (type: KEYBOARD)` 即为成功。
+之后 Moonlight 重新连接即可正常使用键盘。该权限对重启持久有效。
+
