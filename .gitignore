@@ -1,0 +1,21 @@
+# 二进制与本地生成物（不提交）
+*.tar.gz
+driver-pack.tar.gz
+lib/*.so
+assets/
+*.log
+*.png
+*.txt
+
+# 密钥与凭据（严禁提交）
+id_ed25519*
+*.pem
+*.key
+.env
+
+# 系统与编辑器临时文件
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+__pycache__/

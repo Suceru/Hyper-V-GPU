@@ -1,0 +1,16 @@
+#!/bin/bash
+# Launch a GUI application with GPU-PV acceleration (D3D12 OpenGL / Dozen Vulkan).
+# Usage: gpu-run <app> [args...]
+# Examples: gpu-run blender ; gpu-run steam ; gpu-run google-chrome
+if [ "$#" -eq 0 ]; then
+  echo "usage: gpu-run <app> [args...]" >&2
+  exit 2
+fi
+if [ ! -e /dev/dxg ]; then
+  echo "gpu-run: /dev/dxg is missing (dxgkrnl not loaded). Check: gpu-check" >&2
+  exit 1
+fi
+export GALLIUM_DRIVER=d3d12
+export DRI_PRIME=1
+export LIBVA_DRIVER_NAME=d3d12
+exec "$@"
